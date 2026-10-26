@@ -4,6 +4,7 @@
 
 ## Files:
 - `data_visualization.docx` - final report with code, outputs and plots (open to view)
+- `data_visualization.pdf`  - Reference for document
 - `data_visualization.Rmd` - R Markdown source 
 ## Screenshot
 
