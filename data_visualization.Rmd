@@ -1,0 +1,277 @@
+---
+title: "Data Visualization and Insight Communication using R"
+subtitle: "Internship Project 2: How Health and Wealth Changed Across the World (Gapminder)"
+author: "Suruthi D"
+date: "`r format(Sys.Date(), '%d %B %Y')`"
+output:
+  word_document:
+    toc: true
+    toc_depth: 2
+    fig_width: 7
+    fig_height: 4.5
+    fig_caption: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      dpi = 300, fig.width = 7, fig.height = 4.5)
+library(tidyverse)
+library(gapminder)
+library(scales)
+
+# One consistent look for every chart
+theme_set(theme_minimal(base_size = 12) +
+            theme(plot.title = element_text(face = "bold"),
+                  plot.subtitle = element_text(colour = "grey35"),
+                  legend.position = "bottom"))
+
+# One colour per continent, reused in every chart
+cont_cols <- c(Africa = "#e76f51", Americas = "#f4a261", Asia = "#2a9d8f",
+               Europe = "#264653", Oceania = "#8d6cab")
+```
+
+# 1. Introduction
+
+Numbers in a spreadsheet are hard to read. Charts make patterns visible. In this report I use R and the `ggplot2` package to tell a clear story with data: **how long people live, how rich countries are, and how both have changed over 55 years.**
+
+The report is written for a non-technical reader. Each chart has four parts:
+
+1. **Why this chart**: why this chart type suits the question
+2. **Code**: the R code that makes it
+3. **Chart**: the output
+4. **What it tells us**: the insight in plain language
+
+# 2. Data Overview
+
+**Dataset:** `gapminder` (R package), a public dataset compiled from Gapminder Foundation data. It records life expectancy, income and population for countries every five years from 1952 to 2007.
+
+```{r overview}
+glimpse(gapminder)
+```
+
+| Variable | Meaning |
+|---|---|
+| country | Name of the country (`r n_distinct(gapminder$country)` countries) |
+| continent | Africa, Americas, Asia, Europe, Oceania |
+| year | 1952 to 2007, every 5 years (`r n_distinct(gapminder$year)` time points) |
+| lifeExp | Average life expectancy at birth, in years |
+| pop | Population |
+| gdpPercap | Income per person (GDP per capita, in US dollars) |
+
+**Data quality check.** Before plotting, I check for missing values and duplicates.
+
+```{r quality}
+colSums(is.na(gapminder))
+sum(duplicated(gapminder))
+summary(gapminder %>% select(lifeExp, pop, gdpPercap))
+```
+
+The dataset has `r nrow(gapminder)` rows, `r sum(is.na(gapminder))` missing values and `r sum(duplicated(gapminder))` duplicate rows, so it is ready for visualization without extra cleaning.
+
+```{r prep}
+g2007 <- gapminder %>% filter(year == 2007)
+```
+
+# 3. Visualizations
+
+## 3.1 Histogram: How is life expectancy spread across countries?
+
+**Why this chart:** A histogram shows the *shape* of one numeric variable. It tells us whether most countries are similar or whether there are clear groups.
+
+```{r hist}
+ggplot(g2007, aes(lifeExp)) +
+  geom_histogram(binwidth = 2.5, fill = "#2a9d8f", colour = "white") +
+  geom_vline(xintercept = median(g2007$lifeExp), linetype = "dashed", colour = "#264653") +
+  labs(title = "Most countries cluster at high life expectancy, with a long tail below",
+       subtitle = "Life expectancy across countries, 2007 (dashed line = median)",
+       x = "Life expectancy (years)", y = "Number of countries")
+```
+
+**What it tells us:** In 2007 the median country had a life expectancy of about `r round(median(g2007$lifeExp), 1)` years. The chart is skewed to the left: many countries are bunched at the high end, while a smaller group sits far lower, around `r round(min(g2007$lifeExp), 1)` years at the bottom. This shows global averages hide a gap between countries.
+
+## 3.2 Bar Chart: Which continents live longest?
+
+**Why this chart:** A bar chart is the clearest way to compare one number across a few categories.
+
+```{r bar}
+cont_2007 <- g2007 %>%
+  group_by(continent) %>%
+  summarise(avg_life = mean(lifeExp)) %>%
+  arrange(avg_life)
+
+ggplot(cont_2007, aes(reorder(continent, avg_life), avg_life, fill = continent)) +
+  geom_col(show.legend = FALSE, width = 0.7) +
+  geom_text(aes(label = round(avg_life, 1)), hjust = -0.15, size = 4) +
+  scale_fill_manual(values = cont_cols) +
+  coord_flip(ylim = c(0, 90)) +
+  labs(title = "Africa lags well behind the other continents",
+       subtitle = "Average life expectancy by continent, 2007",
+       x = NULL, y = "Average life expectancy (years)")
+```
+
+**What it tells us:** Oceania and Europe lead, while Africa is lowest at about `r round(cont_2007$avg_life[cont_2007$continent == "Africa"], 1)` years, roughly `r round(max(cont_2007$avg_life) - min(cont_2007$avg_life), 0)` years below the top continent. I sorted the bars so the ranking can be read at a glance.
+
+## 3.3 Scatter Plot: Does money buy longer lives?
+
+**Why this chart:** A scatter plot shows the relationship between two numeric variables. Here each dot is a country. I use colour for continent and dot size for population, so one chart carries four variables.
+
+```{r scatter}
+ggplot(g2007, aes(gdpPercap, lifeExp, colour = continent, size = pop)) +
+  geom_point(alpha = 0.7) +
+  scale_x_log10(labels = dollar) +
+  scale_size(range = c(2, 14), guide = "none") +
+  scale_colour_manual(values = cont_cols) +
+  labs(title = "Richer countries tend to live longer, but gains flatten at the top",
+       subtitle = "Income vs life expectancy, 2007 (dot size = population)",
+       x = "GDP per capita (log scale)", y = "Life expectancy (years)", colour = NULL)
+```
+
+**What it tells us:** There is a strong upward pattern: higher income goes with longer life. The log scale on the x-axis is used because incomes vary enormously, and a straight scale would crush most countries into the left corner. The curve flattens at high incomes, which suggests that after a certain point, extra wealth adds little to lifespan. Countries from Africa sit mainly at the bottom left, and large Asian countries appear as big dots in the middle.
+
+```{r cor}
+cor(log10(g2007$gdpPercap), g2007$lifeExp)
+```
+
+The correlation between log income and life expectancy is **`r round(cor(log10(g2007$gdpPercap), g2007$lifeExp), 2)`**, which is strong. Note that correlation does not prove that income *causes* longer life.
+
+## 3.4 Line Chart: How has life expectancy changed over time?
+
+**Why this chart:** A line chart is the standard way to show change over time. One line per continent lets us compare their journeys.
+
+```{r line}
+trend <- gapminder %>%
+  group_by(continent, year) %>%
+  summarise(lifeExp = weighted.mean(lifeExp, pop), .groups = "drop")
+
+ggplot(trend, aes(year, lifeExp, colour = continent)) +
+  geom_line(linewidth = 1.2) +
+  geom_point(size = 2) +
+  scale_colour_manual(values = cont_cols) +
+  labs(title = "Every continent improved, and the gap has narrowed",
+       subtitle = "Population-weighted life expectancy, 1952-2007",
+       x = "Year", y = "Life expectancy (years)", colour = NULL)
+```
+
+**What it tells us:** All continents rose steadily over 55 years. Asia gained the most, rising by about `r round(trend$lifeExp[trend$continent=="Asia" & trend$year==2007] - trend$lifeExp[trend$continent=="Asia" & trend$year==1952], 0)` years. Africa's line is the flattest in later decades, and its slowdown in the 1990s is worth noting (see Section 3.5).
+
+## 3.5 Anomaly Spotlight: When did life expectancy suddenly collapse?
+
+**Why this chart:** Line charts for a few chosen countries make unusual events stand out. I first search the data automatically for the largest single drop between two survey years.
+
+```{r anomaly-find}
+drops <- gapminder %>%
+  arrange(country, year) %>%
+  group_by(country) %>%
+  mutate(change = lifeExp - lag(lifeExp)) %>%
+  ungroup() %>%
+  slice_min(change, n = 5)
+drops %>% select(country, year, lifeExp, change)
+```
+
+```{r anomaly-plot}
+worst <- drops$country[1]
+highlight <- gapminder %>% filter(country %in% unique(drops$country))
+
+ggplot(highlight, aes(year, lifeExp, colour = country)) +
+  geom_line(linewidth = 1.1) +
+  geom_point() +
+  labs(title = "Sudden drops in life expectancy point to crises",
+       subtitle = "The five countries with the largest single-period falls",
+       x = "Year", y = "Life expectancy (years)", colour = NULL)
+```
+
+**What it tells us:** The biggest fall in the dataset happened in **`r as.character(worst)`**, where life expectancy dropped by about `r round(abs(drops$change[1]), 1)` years between two survey periods. Falls like these are not gradual trends. They are linked to events such as war, genocide and the HIV/AIDS epidemic, which explains the dips in the Africa line in Section 3.4.
+
+## 3.6 Box Plot: How unequal is each continent inside?
+
+**Why this chart:** The bar chart in 3.2 only shows averages. A box plot shows the spread, the middle, and the outliers for each group.
+
+```{r box}
+ggplot(g2007, aes(reorder(continent, lifeExp, median), lifeExp, fill = continent)) +
+  geom_boxplot(show.legend = FALSE, alpha = 0.8, outlier.colour = "red") +
+  scale_fill_manual(values = cont_cols) +
+  labs(title = "Africa and Asia are the most varied; Europe is the most uniform",
+       subtitle = "Life expectancy by continent, 2007 (red dots = outliers)",
+       x = NULL, y = "Life expectancy (years)")
+```
+
+**What it tells us:** Europe's box is narrow, meaning countries are similar to one another. Africa and Asia have wide boxes, meaning big differences between countries on the same continent. This is something the bar chart could not show.
+
+## 3.7 Lollipop Chart: Which countries improved the most?
+
+**Why this chart:** A lollipop chart is a cleaner alternative to a bar chart for ranked lists. It lets us rank countries and still see the exact gain.
+
+```{r lollipop}
+gain <- gapminder %>%
+  filter(year %in% c(1952, 2007)) %>%
+  select(country, continent, year, lifeExp) %>%
+  pivot_wider(names_from = year, values_from = lifeExp) %>%
+  mutate(gain = `2007` - `1952`) %>%
+  slice_max(gain, n = 10)
+
+ggplot(gain, aes(gain, reorder(country, gain), colour = continent)) +
+  geom_segment(aes(x = 0, xend = gain, yend = country), linewidth = 1) +
+  geom_point(size = 4) +
+  scale_colour_manual(values = cont_cols) +
+ labs(title = "Ten countries gained 29 to 38 years of life",
+       x = "Years gained", y = NULL, colour = NULL)
+```
+
+**What it tells us:** The top gainer is **`r gain$country[1]`** with about `r round(gain$gain[1], 1)` extra years. Most of the leaders are from Asia, which matches the strong Asian line in Section 3.4. Large gains are possible when starting from a low base and investing in health and living standards.
+
+## 3.8 Faceted Scatter Plot: How did the wealth-health link change over time?
+
+**Why this chart:** Small multiples (facets) put the same chart side by side for different years, so the eye can compare the change directly.
+
+```{r facet, fig.height = 4}
+gapminder %>%
+  filter(year %in% c(1952, 1977, 2007)) %>%
+  ggplot(aes(gdpPercap, lifeExp, colour = continent)) +
+  geom_point(alpha = 0.7, size = 2) +
+  scale_x_log10(labels = dollar) +
+  scale_colour_manual(values = cont_cols) +
+  facet_wrap(~ year) +
+  labs(title = "The whole cloud of countries has moved up and to the right",
+       subtitle = "Income vs life expectancy in 1952, 1977 and 2007",
+       x = "GDP per capita (log scale)", y = "Life expectancy (years)", colour = NULL)
+```
+
+**What it tells us:** In 1952 many countries had life expectancy below 50. By 2007 almost all are above 50. Countries moved up even without a large income increase, which suggests that medicine, sanitation and public health, not only money, drove the improvement.
+
+## 3.9 Heatmap: A compact view of all continents and years
+
+**Why this chart:** A heatmap uses colour intensity to show a whole table at once. It works as a one-page summary.
+
+```{r heat}
+trend %>%
+  ggplot(aes(factor(year), continent, fill = lifeExp)) +
+  geom_tile(colour = "white") +
+  geom_text(aes(label = round(lifeExp)), colour = "white", size = 3) +
+  scale_fill_viridis_c(option = "D", name = "Years") +
+  labs(title = "Colour deepens as life expectancy rises",
+       subtitle = "Population-weighted life expectancy by continent and year",
+       x = "Year", y = NULL) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+**What it tells us:** Reading left to right, every row gets brighter. Reading top to bottom in any column, the gap between continents is visible and shrinks over time.
+
+# 4. Key Insights Summary
+
+1. From the line chart, life expectancy went up on every continent from 1952 to 2007. Asia improved the most, by about `r round(trend$lifeExp[trend$continent=="Asia" & trend$year==2007] - trend$lifeExp[trend$continent=="Asia" & trend$year==1952], 0)` years.
+2. In the scatter plot, richer countries mostly have longer life expectancy (correlation `r round(cor(log10(g2007$gdpPercap), g2007$lifeExp), 2)`). After a certain income level, the increase becomes small.
+3. Africa had the lowest average life expectancy in 2007 (`r round(cont_2007$avg_life[cont_2007$continent == "Africa"], 1)` years). The box plot shows big differences between African countries too.
+4. The biggest drop was in `r as.character(worst)`, about `r round(abs(drops$change[1]), 0)` years. Zimbabwe, Lesotho, Swaziland and Botswana also had sharp falls. The data shows when these drops happened, but not why.
+5. `r gain$country[1]` gained the most life expectancy since 1952, about `r round(gain$gain[1], 0)` years. Most of the top 10 countries are in Asia.
+
+# 5. Conclusion and Limitations
+
+Using nine charts of different types (histogram, bar, scatter, line, box, lollipop, facet, heatmap and an anomaly view), this report showed how health and wealth moved together across the world. The choice of chart mattered each time: bars for ranking, lines for time, scatter for relationships, boxes for spread.
+
+**Limitations:** Data is available only every five years and ends in 2007. Country averages hide differences inside countries. Correlation does not prove cause. Future work could add newer data and map the results geographically.
+
+# Appendix: Session Information
+
+```{r session}
+sessionInfo()
+```
