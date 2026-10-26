@@ -5,3 +5,6 @@
 Files:
 - data_visualization.Rmd: R Markdown source with code
 - data_visualization.docx: final report with charts and interpretation
+## Screenshot
+
+![RStudio workspace](screenshot1.png)
