@@ -7,4 +7,4 @@
 - `data_visualization.Rmd` - R Markdown source 
 ## Screenshot
 
-![RStudio workspace](screenshot.png)
+![RStudio workspace](workflow.png)
