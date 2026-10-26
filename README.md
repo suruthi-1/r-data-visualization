@@ -9,3 +9,5 @@
 ## Screenshot
 
 ![RStudio workspace](workflow.png)
+Fig: Project running in RStudio on Posit Cloud, showing the Rmd file, data objects and knitted
+output
